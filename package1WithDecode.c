@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-uint32_t *memoryUnit
+uint32_t memoryUnit
 uint32_t PC = 0; // could be 11 bits
 uint32_t R[32]; //array of your 32 registers (PC is the final reg.)
 uint32_t instructions[4];   //bec. we hav 4 instructions that can be done in parallel in same clock cycle --> pipline in project description
