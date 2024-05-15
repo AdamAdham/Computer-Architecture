@@ -23,12 +23,19 @@ struct instructionData{
     int funct;   
     signed int imm;   
     int address;
-    int loadStoreAddress;   
+    int loadStoreAddress; 
+    int instructionAddress; // Address of the instruction itself  
 };
+struct instructionData instructionDataArray[4]; 
 
-void flushInstructions(int instructionIndex){
+void flushInstructions(int branchInstructionIndex){
+    int branchInstructionAddress = instructionDataArray[branchInstructionIndex].instructionAddress;
     for(int i=0;i<4;i++){
-        if(i!=instructionIndex){
+        int instructionAddress =  instructionDataArray[i].instructionAddress;
+        if(i!=branchInstructionIndex && instructionAddress>branchInstructionAddress){
+            // 1st condition: Flush the instructions that is not the branch one
+            // &&
+            // 2nd condition: Flush the instructions that came after the branch not before
             instructions[i] = -1;
             instructionsStage[i] = 0; 
             instructionActive[i] = false;
@@ -37,7 +44,6 @@ void flushInstructions(int instructionIndex){
     
 }
 
-struct instructionData instructionDataArray[4]; 
 // boolean array so that no 2 threads can do on same instr
 // array of srtuct to save instr data
 // TODO See register type
@@ -271,6 +277,7 @@ void fetch() {
     if(i>=4) return;
     instructions[i] = memoryUnit[PC]; // TODO UNCOMMENT
     // instructions[i] = counter;
+    instructionDataArray[i].instructionAddress = PC;
     counter++;
     PC = PC + 1;
     instructionsStage[i] = 1;
@@ -284,14 +291,6 @@ void fetch() {
 void decode(int32_t instructionIndex){
     // get instr and do the same as the task
         int instruction = instructions[instructionIndex];
-
-        // instructionDataArray[instructionIndex].opcode = (instruction & 0b11110000000000000000000000000000)>>28;  
-        // instructionDataArray[instructionIndex].R1 = (instruction & 0b00001111100000000000000000000000)>>23;     
-        // instructionDataArray[instructionIndex].R2 = (instruction & 0b00000000011111000000000000000000)>>18;   
-        // instructionDataArray[instructionIndex].R3 = (instruction & 0b00000000000000111110000000000000)>>13;     
-        // instructionDataArray[instructionIndex].shamt = (instruction & 0b00000000000000000001111111111111);      
-        // instructionDataArray[instructionIndex].imm = (instruction & 0b00000000000000111111111111111111)>>0;     
-        // instructionDataArray[instructionIndex].address = (instruction & 0b00001111111111111111111111111111)>>0;
 
         instructionDataArray[instructionIndex].opcode = (instruction & 0b11110000000000000000000000000000)>>28;  
         instructionDataArray[instructionIndex].R1Address = (instruction & 0b00001111100000000000000000000000)>>23;  
@@ -319,29 +318,6 @@ void decode(int32_t instructionIndex){
         instructionsStage[instructionIndex]+=1;
 }
 
-// void decodeInstruction(int instruction){
-//     // get instr and do the same as the task
-
-//         int opcode = (instruction & 0b11110000000000000000000000000000)>>28;  
-//         int R1 = (instruction & 0b00001111100000000000000000000000)>>23;     
-//         int R2 = (instruction & 0b00000000011111000000000000000000)>>18;   
-//         int R3 = (instruction & 0b00000000000000111110000000000000)>>13;     
-//         int shamt = (instruction & 0b0000000000000000001111111111111)>>0;      
-//         int imm = (instruction & 0b00000000000000111111111111111111)>>0;     
-//         int address = (instruction & 0b00001111111111111111111111111111)>>0;
-
-//         printf("\n \n\n\n\n\n\n\n\n");
-//         printf("opcode: %d \n", opcode);
-//         printf("R1: %d \n", R[R1]);
-//         printf("R2: %d \n", R[R2]);
-//         printf("R3: %d \n", R[R3]);
-//         printf("shamt: %d \n", shamt);
-//         printf("imm: %d \n", imm);
-//         printf("address: %d \n", address);
-
-//         // instructionsStage[instructionIndex]+=1;
-// }
-
 void execute(int32_t instructionIndex){
     // add all params rs,R3,rt etc and acc to opcode we use the relevant arguement
     // immediate signed
@@ -367,8 +343,10 @@ void execute(int32_t instructionIndex){
             // ASK IF NEED TO DO ERRORS OR IF SEGMENTATION FAULTS ARE ACCEPTED
             if(R1Address!=0){
                 R[R1Address] = R2 + R3;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
             break;
         case 1:
             // SUB
@@ -382,8 +360,11 @@ void execute(int32_t instructionIndex){
             // ASK IF NEED TO DO ERRORS OR IF SEGMENTATION FAULTS ARE ACCEPTED
             if(R1Address!=0){
                 R[R1Address] = R2 - R3;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
         case 2:
             // MULI
@@ -396,8 +377,11 @@ void execute(int32_t instructionIndex){
             printf("R%i was %i in execute stage \n",R1Address,R1);
             if(R1Address!=0){
                 R[R1Address] = R2 * imm;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
 
         case 3:
@@ -411,8 +395,11 @@ void execute(int32_t instructionIndex){
             printf("R%i was %i in execute stage \n",R1Address,R1);
             if(R1Address!=0){
                 R[R1Address] = R2 + imm;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
 
         case 4:
@@ -427,8 +414,11 @@ void execute(int32_t instructionIndex){
             if(res!=0){
                 PC = PC + imm;  //pc + 1 is already done so we'll add the imm directly --> check the remarks document
                 flushInstructions(instructionIndex);
+                printf("PC has changed to %i in execute stage \n",PC);
+            }else{
+                printf("PC has not been changed \n");
             }     
-            printf("PC has changed to %i in execute stage \n",PC);
+            
             break;
 
         case 5:
@@ -442,8 +432,11 @@ void execute(int32_t instructionIndex){
             printf("R%i was %i in execute stage \n",R1Address,R1);
             if(R1Address!=0){
                 R[R1Address] = R2 & imm;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
 
         case 6:
@@ -457,8 +450,11 @@ void execute(int32_t instructionIndex){
             printf("R%i was %i in execute stage \n",R1Address,R1);
             if(R1Address!=0){
                 R[R1Address] = R2 | imm;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
 
         case 7:
@@ -484,8 +480,11 @@ void execute(int32_t instructionIndex){
             printf("R%i was %i in execute stage \n",R1Address,R1);
             if(R1Address!=0){
                 R[R1Address] = R2 << shamt;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
 
         case 9:
@@ -499,8 +498,11 @@ void execute(int32_t instructionIndex){
             printf("R%i was %i in execute stage \n",R1Address,R1);
             if(R1Address!=0){
                 R[R1Address] = R2 >> shamt;
+                printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            }else{
+                printf("R0 has not been changed \n");
             }
-            printf("R%i has changed to %i in execute stage \n",R1Address,R[R1Address]);
+            
             break;
 
         case 10:
@@ -535,71 +537,37 @@ void memory(int32_t instructionIndex){
     int opcode = instructionDataArray[instructionIndex].opcode;
     int memoryLocation = instructionDataArray[instructionIndex].loadStoreAddress;
     int R1 = instructionDataArray[instructionIndex].R1;
+    int R1Address = instructionDataArray[instructionIndex].R1Address;
     if(opcode==10){
         // LW
-        printf("R%i was %i in execute stage \n",R1,R[R1]);
-        R[R1] = memoryUnit[memoryLocation];
-        printf("R%i has changed to %i in execute stage \n",R1,R[R1]);
+        printf("R%i was %i in Memory stage \n",R1Address,R1);
+        R[R1Address] = memoryUnit[memoryLocation];
+        printf("R%i has changed to %i in Memory stage \n",R1Address,R[R1Address]);
     }else if(opcode==11){
         // SW
         // since only memory is LW and SW
-        printf("Memory address location %i was %i in execute stage \n",memoryLocation,memoryUnit[memoryLocation]);
-        memoryUnit[memoryLocation] = R[R1];
-        printf("Memory address location %i has changed to %i in execute stage \n",memoryLocation,memoryUnit[memoryLocation]);
+        printf("Memory address location %i was %i in Memory stage \n",memoryLocation,memoryUnit[memoryLocation]);
+        memoryUnit[memoryLocation] = R1;
+        printf("Memory address location %i has changed to %i in Memory stage \n",memoryLocation,memoryUnit[memoryLocation]);
     }
     instructionsStage[instructionIndex] += 1;
 }
 
 void writeback(int32_t instructionIndex){
-    // DONT
-    // when do we use this function, for each instruction
-    // says back to register file so when executing (execute) we just save it in a temp var
-    // in memory for LW do we save in temp var also?
+    // TA Ahmed Essam said that we dont implement it for package 1
     char string[50];
     instructionToString(instructions[instructionIndex], string, sizeof(string));
     printf("Instruction:  %s     |      Stage: Writeback \n",string);
     instructionsStage[instructionIndex]=0;
-    // todo check if we can reset stage at execute cycle
 }
 
-// void readTextToMemory() {
-//     FILE *file;
-//     char line[50]; // TODO Adjust the size
-
-//     file = fopen("instructions.txt", "r");
-//     if (file == NULL) {
-//         printf("Unable to open file.\n");
-//         return;
-//     }
-
-//     // Read a line from the file and store it in 'line'
-//     while (fgets(line, sizeof(line), file) != NULL) {
-//         char* token = strtok(line," ");
-
-//     }
-
-//     fclose(file);
-// }
-
 int main() {
-    // memoryUnit = (uint32_t *)malloc(2048 * sizeof(uint32_t));
-    //fetch();
-    // readInstructions();
-    // for(int i=0;i<1024;i++){
-    //     printf("%d",memoryUnit[i]);
-    // }
     memoryUnit = malloc(2048 * sizeof(uint32_t));
     
     readInstructions();
     for (int i = 0; i <= sizeof(memoryUnit); i++) {
         printf("instruction%d is %d\n", i,memoryUnit[i]);
     }
-    // printf("Array elements:\n");
-    // for (int i = 0; i <= getSizeOfTextFile(); i++) {
-    //     printf("%d\n", memoryUnit[i]);
-    // }
-    // check it does segmentation fault TODO
-    // printf("\n");
     int clockCycle = 1;
     int decodeCount = 0;
     int executeCount = 0;
@@ -608,8 +576,30 @@ int main() {
     
     R[2] = 5;
     R[3] = 11;
+    // printf("\n\n\n\n\n");
     // fetch();
     // decode(0);
+    // execute(0);
+    // memory(0);
+    // writeback(0);
+    // fetch();
+    // decode(0);
+    // execute(0);
+    // memory(0);
+    // writeback(0);
+    // fetch();
+    // decode(0);
+    // execute(0);
+    // memory(0);
+    // writeback(0);
+    // fetch();
+    // decode(0);
+    // execute(0);
+    // memory(0);
+    // writeback(0);
+    // fetch();
+    // decode(0);
+    // printf("R2: %d\n",R[2]);
     // execute(0);
     // memory(0);
     // writeback(0);
@@ -641,31 +631,14 @@ int main() {
     // fetch();
     // decode(0);
     // execute(0);
+    // printf("%d\n",memoryUnit[11]);
     // memory(0);
     // writeback(0);
     // fetch();
     // decode(0);
     // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
+    // printf("here");
+    // printf("%d\n",memoryUnit[17]);
     // memory(0);
     // writeback(0);
 
@@ -673,26 +646,18 @@ int main() {
     printf("\n\n\n\n\n");
 
     while(clockCycle<=19){
-        // thread init
         printf("Clock Cycle: %d \n\n",clockCycle);
     
-
-
-        // how to do the instrindex
         // FETCH
         if(clockCycle%2!=0){
             // every 2 clock cycles we fetch
             fetch();
         }
-        // for(int i=0;i<4;i++){
-        //     printf("%i\n",instructionActive[i]);
-        // }
         for(int i=0;i<4;i++){
             if(instructionActive[i]==false){
                 char string[50];
                 instructionToString(instructions[i], string, sizeof(string));
                 if(instructionsStage[i]==4){     //check if we finished the execute stage  --> go to WB
-                    // NO WRITEBACK
                     writeback(i);
                 }
                 if(instructionsStage[i]==3 && clockCycle%2==0){  //check if we finished the execute stage + no fetch operation is being executed
@@ -700,27 +665,25 @@ int main() {
                     memory(i);
                 }
                 if(instructionsStage[i]==2&&(executeFlag==i||executeFlag==-1)){  //check if we finished the decode stage --> go to execute
-                    // if == i then we 
                     printf("Instruction:  %s   |      Stage: Execute \n\n",string);
                     executeCount++;
                     executeFlag = i;
                 }
                 if(instructionsStage[i]==1&&(decodeFlag==i||decodeFlag==-1)){  //check if we finished the fetch stage
-                    // if == i then we 
                     printf("Instruction:  %s   |      Stage: Decode \n\n",string);
                     decodeCount++;  //to check that you completed the 2 clock cycles
                     decodeFlag = i; // to prevent simultaneous decode of instructions
+                }
+                if(executeCount==2){
+                    execute(i);
+                    executeCount=0;
+                    executeFlag=-1;
                 }
                 
                 if(decodeCount==2){  //to reset the decode count
                     decode(i);
                     decodeCount=0;
                     decodeFlag=-1;
-                }
-                if(executeCount==2){
-                    execute(i);
-                    executeCount=0;
-                    executeFlag=-1;
                 }
             }
         }
