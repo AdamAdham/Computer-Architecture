@@ -529,8 +529,9 @@ void execute(int32_t instructionIndex){
         printf("OPERATION NOT SUPPORTED \n");
         break;
     }
-    
-    instructionsStage[instructionIndex]+=1;
+    // Do not increment instruction stage because execution will happen in 1st clock cycle to handle the data hazard
+    // Incremented in 2nd clock cycle
+    // instructionsStage[instructionIndex]+=1;
 }
 
 void memory(int32_t instructionIndex){
@@ -573,6 +574,7 @@ int main() {
     int executeCount = 0;
     int decodeFlag = -1;
     int executeFlag = -1;
+    int executingIndex = -1;
     
     R[2] = 5;
     R[3] = 11;
@@ -657,7 +659,7 @@ int main() {
             if(instructionActive[i]==false){
                 char string[50];
                 instructionToString(instructions[i], string, sizeof(string));
-                if(instructionsStage[i]==4){     //check if we finished the execute stage  --> go to WB
+                if(instructionsStage[i]==4 ){     //check if we finished the execute stage  --> go to WB
                     writeback(i);
                 }
                 if(instructionsStage[i]==3 && clockCycle%2==0){  //check if we finished the execute stage + no fetch operation is being executed
@@ -666,6 +668,9 @@ int main() {
                 }
                 if(instructionsStage[i]==2&&(executeFlag==i||executeFlag==-1)){  //check if we finished the decode stage --> go to execute
                     printf("Instruction:  %s   |      Stage: Execute \n\n",string);
+                    if(executeFlag==-1){
+                        execute(i);   // First time entering (so execute)
+                    } 
                     executeCount++;
                     executeFlag = i;
                 }
@@ -675,7 +680,7 @@ int main() {
                     decodeFlag = i; // to prevent simultaneous decode of instructions
                 }
                 if(executeCount==2){
-                    execute(i);
+                    instructionsStage[i]+=1;
                     executeCount=0;
                     executeFlag=-1;
                 }
