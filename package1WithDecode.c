@@ -325,8 +325,26 @@ void fetch(int clockCycle) {
         i++;
     }
     if(i>=4) return;
-    instructions[i] = memoryUnit[PC];
-    instructionDataArray[i].instructionAddress = PC;
+    int pcAddressOfBranch = -1;
+    for(int i=0;i<4;i++){
+        if(instructionDataArray[i].branch){
+            printf("%i\n",instructionDataArray[i].branch);
+            printf("%i\n",instructionDataArray[i].aluResult);
+            // There is a previous instruction which branched but has not written back to PC
+            pcAddressOfBranch = instructionDataArray[i].aluResult;
+        }
+    }
+    if(pcAddressOfBranch!=-1){
+        // There is a previous instruction which branched but has not written back to PC
+        // pcAddressOfBranch value is the one that will be written back in Write Back stage
+        instructionDataArray[i].instructionAddress = pcAddressOfBranch;
+        instructions[i] = memoryUnit[pcAddressOfBranch];
+
+    }else{
+        instructionDataArray[i].instructionAddress = PC;
+        instructions[i] = memoryUnit[PC];
+    }
+    
     instructionDataArray[i].clockCycleEntered = clockCycle;
     PC = PC + 1;
     instructionsStage[i] = 1;
@@ -366,25 +384,25 @@ bool decode(int32_t instructionIndex){
         if(!(string[0]=='J')){
             // Not a jump instruction because jumps dont use registers
             int dependantOnInstructionIndexR2 = RegisterDestination[instructionDataArray[instructionIndex].R2Address];  
-            if(instructionDataArray[dependantOnInstructionIndexR2].opcode==10){
+            if(instructionDataArray[dependantOnInstructionIndexR2].opcode==10 && instructionsStage[dependantOnInstructionIndexR2]<3){
                 // dependent instruction is a LW instruction
                 // So we return false to stall the stages
                 return false;
             }
             if(dependantOnInstructionIndexR2!=-1){  
-                instructionDataArray[instructionIndex].R2 = instructionDataArray[dependantOnInstructionIndexR2].aluResult;                
+                instructionDataArray[instructionIndex].R2 = instructionDataArray[dependantOnInstructionIndexR2].aluResult;         // Forwarding       
             }
             if(isFirst4CharactersInArray(string, generalRegisterOpcodes, sizeof(generalRegisterOpcodes) / sizeof(generalRegisterOpcodes[0]))) {   
                 // this is an ADD or SUB opcode
                 // R3 is also needed  
                 int dependantOnInstructionIndexR3 = RegisterDestination[instructionDataArray[instructionIndex].R3Address];  
-                if(instructionDataArray[dependantOnInstructionIndexR2].opcode==10){
+                if(instructionDataArray[dependantOnInstructionIndexR2].opcode==10 && instructionsStage[dependantOnInstructionIndexR2]<3){
                     // dependent instruction is a LW instruction
                     // So we return false to stall the stages
                     return false;
                 }
                 if(dependantOnInstructionIndexR3!=-1){  
-                    instructionDataArray[instructionIndex].R3 = instructionDataArray[dependantOnInstructionIndexR3].aluResult; 
+                    instructionDataArray[instructionIndex].R3 = instructionDataArray[dependantOnInstructionIndexR3].aluResult; // Forwarding 
                 }
             }
         }
@@ -543,12 +561,26 @@ void writeback(int32_t instructionIndex){
         }      
         
     }
+
+    // Reset data for that instruction
     for(int i = 0;i<32;i++){
         if(RegisterDestination[i]==instructionIndex){
             RegisterDestination[i] = -1;
         }
     }
+    instructionDataArray[instructionIndex].opcode = 0;  
+    instructionDataArray[instructionIndex].R1Address = 0;
+    instructionDataArray[instructionIndex].R1 = 0;
+    instructionDataArray[instructionIndex].R2Address = 0; 
+    instructionDataArray[instructionIndex].R2 =
+    instructionDataArray[instructionIndex].R3Address = 0;
+    instructionDataArray[instructionIndex].R3 = 0;
+    instructionDataArray[instructionIndex].shamt = 0;
+    instructionDataArray[instructionIndex].imm = 0; 
+    instructionDataArray[instructionIndex].address = 0;
+    instructionDataArray[instructionIndex].branch = false;
     instructionsStage[instructionIndex]=0;
+    
 }
 
 int main() {
@@ -561,12 +593,11 @@ int main() {
     int clockCycle = 1;
     int decodeCount = 0;
     int executeCount = 0;
-    int decodeFlag = -1;
+    int decodeIndex = -1;
     int executeFlag = -1;
 
     int stallCounter = 0;
     bool stallFlag = false;
-    
     R[1] = 1;
     R[2] = 2;
     R[3] = 3;
@@ -650,21 +681,24 @@ int main() {
     printf("\n\n\n\n\n");
 
     while(clockCycle<=19){
-        printf("Clock Cycle: %d \n\n",clockCycle);
+        printf("Clock Cycle: %d \n",clockCycle);
+        printf("Stall counter: %d \n",stallCounter);
+        printf("Stall flag: %d \n\n",stallFlag);
     
         // FETCH
-        if(clockCycle%2!=0 && stallCounter%2==0){
+        if((clockCycle%2==1 && stallCounter%2==0) || (clockCycle%2==0 && stallCounter%2==1)&& !stallFlag){
             // every 2 clock cycles we fetch
             fetch(clockCycle);
         }
         for(int i=0;i<4;i++){
             if(instructionActive[i]==false){
+                // printf("boolean: %d\n",instructionsStage[i]==1 && (decodeIndex==i||decodeIndex==-1) && !stallFlag);
                 char string[50];
                 instructionToString(instructions[i], string, sizeof(string));
                 if(instructionsStage[i]==4 && !stallFlag){     //check if we finished the execute stage  --> go to WB
                     writeback(i);
                 }
-                if(instructionsStage[i]==3 && clockCycle%2==0 && stallCounter%2!=1){  //check if we finished the execute stage + no fetch operation is being executed
+                if(instructionsStage[i]==3 && ((clockCycle%2==0 && stallCounter%2==0 ) || (clockCycle%2==1 && stallCounter%2==1) || (instructionsStage[i]==3 && stallFlag))){  //check if we finished the execute stage + no fetch operation is being executed
                     printf("Instruction:  %s index = %d   |      Stage: Memory \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     memory(i);
                 }
@@ -673,10 +707,10 @@ int main() {
                     executeCount++;
                     executeFlag = i;
                 }
-                if(instructionsStage[i]==1&&(decodeFlag==i||decodeFlag==-1 && !stallFlag)){  //check if we finished the fetch stage
+                if(instructionsStage[i]==1 && (decodeIndex==i||decodeIndex==-1) && !stallFlag){  //check if we finished the fetch stage
                     printf("Instruction:  %s index = %d  |      Stage: Decode \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     decodeCount++;  //to check that you completed the 2 clock cycles
-                    decodeFlag = i; // to prevent simultaneous decode of instructions
+                    decodeIndex = i; // to prevent simultaneous decode of instructions
                 }
                 if(executeCount==2 && !stallFlag){
                     execute(i);
@@ -684,14 +718,16 @@ int main() {
                     executeFlag=-1;
                 }
                 
-                if(decodeCount==2){  //to reset the decode count
+                if(decodeCount==2 && decodeIndex==i){  //to reset the decode count
                     bool decodeFinished = decode(i);
                     if(decodeFinished){
                         decodeCount=0;
-                        decodeFlag=-1;
+                        decodeIndex=-1;
+                        stallFlag = false;                       
                     }else{
                         stallFlag = true;
                         stallCounter++;
+                        printf("Stalled \n"); //TODO add print stall
                     }       
                 }
             }
