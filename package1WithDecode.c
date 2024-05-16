@@ -267,6 +267,24 @@ uint32_t concatenate_bits(uint32_t PC, uint32_t imm) {
 
     return concatenated_value;
 }
+
+bool isFirst4CharactersInArray(char *str, char *array[], int array_size) {
+    // Extract the first 4 characters of the string
+    char first_4_chars[5];  // Make room for the null terminator
+    strncpy(first_4_chars, str, 4);
+    first_4_chars[4] = '\0';  // Null terminate the string
+
+    // Iterate over the array of strings
+    for (int i = 0; i < array_size; i++) {
+        // Compare the first 4 characters with each string in the array
+        if (strcmp(first_4_chars, array[i]) == 0) {
+            return true;  // Match found
+        }
+    }
+
+    return false;  // No match found
+}
+
 int counter = 1;
 void fetch() {
     // In description says that we fetch from memory
@@ -471,7 +489,6 @@ void execute(int32_t instructionIndex){
 
         case 8:
             // SLL
-            
             R1 = instructionDataArray[instructionIndex].R1;
             R2 = instructionDataArray[instructionIndex].R2;
             shamt = instructionDataArray[instructionIndex].shamt;
@@ -484,12 +501,10 @@ void execute(int32_t instructionIndex){
             }else{
                 printf("R0 has not been changed \n");
             }
-            
             break;
 
         case 9:
             // SRL
-            
             R1 = instructionDataArray[instructionIndex].R1;
             R2 = instructionDataArray[instructionIndex].R2;
             shamt = instructionDataArray[instructionIndex].shamt;
@@ -506,8 +521,7 @@ void execute(int32_t instructionIndex){
             break;
 
         case 10:
-            // LW
-            
+            // LW            
             R2 = instructionDataArray[instructionIndex].R2;
             imm = instructionDataArray[instructionIndex].imm;
             // R1 = memoryUnit[R2+imm];     --> this accesses the memory which is incorrect in execute stage
@@ -529,9 +543,8 @@ void execute(int32_t instructionIndex){
         printf("OPERATION NOT SUPPORTED \n");
         break;
     }
-    // Do not increment instruction stage because execution will happen in 1st clock cycle to handle the data hazard
-    // Incremented in 2nd clock cycle
-    // instructionsStage[instructionIndex]+=1;
+    
+    instructionsStage[instructionIndex]+=1;
 }
 
 void memory(int32_t instructionIndex){
@@ -554,11 +567,20 @@ void memory(int32_t instructionIndex){
     instructionsStage[instructionIndex] += 1;
 }
 
-void writeback(int32_t instructionIndex){
-    // TA Ahmed Essam said that we dont implement it for package 1
+// TA Ahmed Essam said that we dont implement it for package 1
+void writeback(int32_t instructionIndex){ 
+    //TODO R1 value is not correct
+    char *opcodes[] = {"ADD ", "SUB ", "MULI", "ADDI", "ANDI", "ORI ", "SLL ","SRL "};
     char string[50];
     instructionToString(instructions[instructionIndex], string, sizeof(string));
-    printf("Instruction:  %s     |      Stage: Writeback \n",string);
+    printf("Instruction:  %s     |      Stage: Writeback",string);
+    if(isFirst4CharactersInArray(string, opcodes, sizeof(opcodes) / sizeof(opcodes[0]))) {     
+        int R1Address = instructionDataArray[instructionIndex].R1Address;     
+        memoryUnit[R1Address + 1024] = R[R1Address];
+        printf(": %d was stored in memory address %d\n",memoryUnit[R1Address + 1024],1024+R1Address);
+    } else {
+        printf(" (not needed)\n");
+    }
     instructionsStage[instructionIndex]=0;
 }
 
@@ -574,76 +596,21 @@ int main() {
     int executeCount = 0;
     int decodeFlag = -1;
     int executeFlag = -1;
-    int executingIndex = -1;
     
-    R[2] = 5;
-    R[3] = 11;
-    // printf("\n\n\n\n\n");
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // printf("R2: %d\n",R[2]);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // printf("%d\n",memoryUnit[11]);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // printf("here");
-    // printf("%d\n",memoryUnit[17]);
-    // memory(0);
-    // writeback(0);
-
+    R[1] = 1;
+    R[2] = 2;
+    R[3] = 3;
+    R[4] = 4;
+    R[5] = 5;
+    R[6] = 6;
+    R[7] = 7;
+    R[8] = 8;
+    R[9] = 9;
+    R[10] = 10;
+    R[11] = 11;
+    R[12] = 12;
+    R[13] = 13;
+    R[14] = 14;
 
     printf("\n\n\n\n\n");
 
@@ -659,7 +626,9 @@ int main() {
             if(instructionActive[i]==false){
                 char string[50];
                 instructionToString(instructions[i], string, sizeof(string));
-                if(instructionsStage[i]==4 ){     //check if we finished the execute stage  --> go to WB
+                
+                
+                if(instructionsStage[i]==4){     //check if we finished the execute stage  --> go to WB
                     writeback(i);
                 }
                 if(instructionsStage[i]==3 && clockCycle%2==0){  //check if we finished the execute stage + no fetch operation is being executed
@@ -668,9 +637,6 @@ int main() {
                 }
                 if(instructionsStage[i]==2&&(executeFlag==i||executeFlag==-1)){  //check if we finished the decode stage --> go to execute
                     printf("Instruction:  %s   |      Stage: Execute \n\n",string);
-                    if(executeFlag==-1){
-                        execute(i);   // First time entering (so execute)
-                    } 
                     executeCount++;
                     executeFlag = i;
                 }
@@ -680,7 +646,7 @@ int main() {
                     decodeFlag = i; // to prevent simultaneous decode of instructions
                 }
                 if(executeCount==2){
-                    instructionsStage[i]+=1;
+                    execute(i);
                     executeCount=0;
                     executeFlag=-1;
                 }
@@ -723,8 +689,7 @@ int main() {
         if(!(memoryUnit[i]==0)){
             printf("Memory[%d] = %d \n",i,memoryUnit[i]);
         }
-    }
-    
+    }    
 
     return 0;
 }
