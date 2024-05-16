@@ -47,7 +47,6 @@ void flushInstructions(int branchInstructionIndex){
             instructionActive[i] = false;
         }  
     }
-    
 }
 
 // boolean array so that no 2 threads can do on same instr
@@ -286,6 +285,22 @@ bool isPCInstruction(char *str) {
     return false;  // No match found
 }
 
+bool notR1Instruction(char *str) {
+    // Extract the first 4 characters of the string
+    char first_3_chars[3];  // Make room for the null terminator
+    strncpy(first_3_chars, str, 3);
+    
+    char first_2_chars[2];  // Make room for the null terminator
+    strncpy(first_2_chars, str, 2);
+
+    char firstChar = str[0];
+
+    if(strcmp(first_3_chars,"BNE")==0 || firstChar == 'J' || strcmp(first_2_chars,"SW")==0){
+        return true;
+    }    
+    return false;  // No match found
+}
+
 bool isFirst4CharactersInArray(char *str, char *array[], int array_size) {
     // Extract the first 4 characters of the string
     char first_4_chars[5];  // Make room for the null terminator
@@ -322,7 +337,7 @@ void fetch(int clockCycle) {
     printf("Instruction:  %s     |      Stage: Fetch \n",string);
 }
 
-void decode(int32_t instructionIndex){
+bool decode(int32_t instructionIndex){
     // get instr and do the same as the task
         int instruction = instructions[instructionIndex];
 
@@ -343,17 +358,31 @@ void decode(int32_t instructionIndex){
         char *generalRegisterOpcodes[] = {"ADD ", "SUB "};
         char string[50];
         instructionToString(instructions[instructionIndex], string, sizeof(string));
-        if(string[0]!="J"){
+
+        if(notR1Instruction(string)){
+            RegisterDestination[instructionDataArray[instructionIndex].R1Address] = instructionIndex; 
+        }
+
+        if(!(string[0]=='J')){
             // Not a jump instruction because jumps dont use registers
             int dependantOnInstructionIndexR2 = RegisterDestination[instructionDataArray[instructionIndex].R2Address];  
-            int decode
-            if(dependantOnInstructionIndexR2!=-1 && ){  
-                instructionDataArray[instructionIndex].R2 = instructionDataArray[dependantOnInstructionIndexR2].aluResult; 
+            if(instructionDataArray[dependantOnInstructionIndexR2].opcode==10){
+                // dependent instruction is a LW instruction
+                // So we return false to stall the stages
+                return false;
+            }
+            if(dependantOnInstructionIndexR2!=-1){  
+                instructionDataArray[instructionIndex].R2 = instructionDataArray[dependantOnInstructionIndexR2].aluResult;                
             }
             if(isFirst4CharactersInArray(string, generalRegisterOpcodes, sizeof(generalRegisterOpcodes) / sizeof(generalRegisterOpcodes[0]))) {   
                 // this is an ADD or SUB opcode
                 // R3 is also needed  
                 int dependantOnInstructionIndexR3 = RegisterDestination[instructionDataArray[instructionIndex].R3Address];  
+                if(instructionDataArray[dependantOnInstructionIndexR2].opcode==10){
+                    // dependent instruction is a LW instruction
+                    // So we return false to stall the stages
+                    return false;
+                }
                 if(dependantOnInstructionIndexR3!=-1){  
                     instructionDataArray[instructionIndex].R3 = instructionDataArray[dependantOnInstructionIndexR3].aluResult; 
                 }
@@ -373,6 +402,7 @@ void decode(int32_t instructionIndex){
         // printf("address: %d \n", instructionDataArray[instructionIndex].address);
 
         instructionsStage[instructionIndex]+=1;
+        return true;
 }
 
 void execute(int32_t instructionIndex){
@@ -513,6 +543,11 @@ void writeback(int32_t instructionIndex){
         }      
         
     }
+    for(int i = 0;i<32;i++){
+        if(RegisterDestination[i]==instructionIndex){
+            RegisterDestination[i] = -1;
+        }
+    }
     instructionsStage[instructionIndex]=0;
 }
 
@@ -528,6 +563,9 @@ int main() {
     int executeCount = 0;
     int decodeFlag = -1;
     int executeFlag = -1;
+
+    int stallCounter = 0;
+    bool stallFlag = false;
     
     R[1] = 1;
     R[2] = 2;
@@ -615,7 +653,7 @@ int main() {
         printf("Clock Cycle: %d \n\n",clockCycle);
     
         // FETCH
-        if(clockCycle%2!=0){
+        if(clockCycle%2!=0 && stallCounter%2==0){
             // every 2 clock cycles we fetch
             fetch(clockCycle);
         }
@@ -623,33 +661,38 @@ int main() {
             if(instructionActive[i]==false){
                 char string[50];
                 instructionToString(instructions[i], string, sizeof(string));
-                if(instructionsStage[i]==4 ){     //check if we finished the execute stage  --> go to WB
+                if(instructionsStage[i]==4 && !stallFlag){     //check if we finished the execute stage  --> go to WB
                     writeback(i);
                 }
-                if(instructionsStage[i]==3 && clockCycle%2==0){  //check if we finished the execute stage + no fetch operation is being executed
+                if(instructionsStage[i]==3 && clockCycle%2==0 && stallCounter%2!=1){  //check if we finished the execute stage + no fetch operation is being executed
                     printf("Instruction:  %s index = %d   |      Stage: Memory \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     memory(i);
                 }
-                if(instructionsStage[i]==2&&(executeFlag==i||executeFlag==-1)){  //check if we finished the decode stage --> go to execute
+                if(instructionsStage[i]==2&&(executeFlag==i||executeFlag==-1 && !stallFlag)){  //check if we finished the decode stage --> go to execute
                     printf("Instruction:  %s index = %d  |      Stage: Execute \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     executeCount++;
                     executeFlag = i;
                 }
-                if(instructionsStage[i]==1&&(decodeFlag==i||decodeFlag==-1)){  //check if we finished the fetch stage
+                if(instructionsStage[i]==1&&(decodeFlag==i||decodeFlag==-1 && !stallFlag)){  //check if we finished the fetch stage
                     printf("Instruction:  %s index = %d  |      Stage: Decode \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     decodeCount++;  //to check that you completed the 2 clock cycles
                     decodeFlag = i; // to prevent simultaneous decode of instructions
                 }
-                if(executeCount==2){
+                if(executeCount==2 && !stallFlag){
                     execute(i);
                     executeCount=0;
                     executeFlag=-1;
                 }
                 
                 if(decodeCount==2){  //to reset the decode count
-                    decode(i);
-                    decodeCount=0;
-                    decodeFlag=-1;
+                    bool decodeFinished = decode(i);
+                    if(decodeFinished){
+                        decodeCount=0;
+                        decodeFlag=-1;
+                    }else{
+                        stallFlag = true;
+                        stallCounter++;
+                    }       
                 }
             }
         }
