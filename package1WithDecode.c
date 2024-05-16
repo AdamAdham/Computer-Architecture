@@ -11,6 +11,8 @@ uint32_t instructions[4];   //bec. we hav 4 instructions that can be done in par
 uint16_t instructionsStage[4] = {0};  //bec. each instruction of the 4 could have a different stage (fetch - decode - execute - writeback)
                                       // recall: the fetch (IF) and memory (MEM) stages cannot be done in parallel since they access same physical memory
 bool instructionActive[4] = {false};
+int RegisterDestination[32] = {-1}; // 
+
 struct instructionData{
     int opcode;
     int R1;  //r
@@ -27,14 +29,16 @@ struct instructionData{
     int instructionAddress; // Address of the instruction itself  
     int aluResult;
     bool branch;
+    int dependantIndex;
+    int clockCycleEntered;
 };
 struct instructionData instructionDataArray[4]; 
 
 void flushInstructions(int branchInstructionIndex){
-    int branchInstructionAddress = instructionDataArray[branchInstructionIndex].instructionAddress;
+    int branchClockCycleEntered = instructionDataArray[branchInstructionIndex].clockCycleEntered;
     for(int i=0;i<4;i++){
-        int instructionAddress =  instructionDataArray[i].instructionAddress;
-        if(i!=branchInstructionIndex && instructionAddress>branchInstructionAddress){
+        int clockCycleEntered =  instructionDataArray[i].clockCycleEntered;
+        if(i!=branchInstructionIndex && clockCycleEntered>branchClockCycleEntered){
             // 1st condition: Flush the instructions that is not the branch one
             // &&
             // 2nd condition: Flush the instructions that came after the branch not before
@@ -299,18 +303,16 @@ bool isFirst4CharactersInArray(char *str, char *array[], int array_size) {
     return false;  // No match found
 }
 
-int counter = 1;
-void fetch() {
+void fetch(int clockCycle) {
     // In description says that we fetch from memory
     int i=0;
     while(instructionsStage[i]!=0 && i<4){
         i++;
     }
     if(i>=4) return;
-    instructions[i] = memoryUnit[PC]; // TODO UNCOMMENT
-    // instructions[i] = counter;
+    instructions[i] = memoryUnit[PC];
     instructionDataArray[i].instructionAddress = PC;
-    counter++;
+    instructionDataArray[i].clockCycleEntered = clockCycle;
     PC = PC + 1;
     instructionsStage[i] = 1;
     instructionActive[i] = true;
@@ -334,7 +336,7 @@ void decode(int32_t instructionIndex){
         instructionDataArray[instructionIndex].shamt = (instruction & 0b00000000000000000001111111111111);      
         instructionDataArray[instructionIndex].imm = (instruction & 0b00000000000000111111111111111111)>>0;     
         instructionDataArray[instructionIndex].address = (instruction & 0b00001111111111111111111111111111)>>0;
-        instructionDataArray[instructionIndex].branch = false;
+        
         
         // printf("\n \n\n\n\n\n\n\n\n");
         // printf("Instruction: %d\n",instruction);
@@ -592,7 +594,7 @@ int main() {
         // FETCH
         if(clockCycle%2!=0){
             // every 2 clock cycles we fetch
-            fetch();
+            fetch(clockCycle);
         }
         for(int i=0;i<4;i++){
             if(instructionActive[i]==false){
