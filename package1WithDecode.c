@@ -11,7 +11,7 @@ uint32_t instructions[4];   //bec. we hav 4 instructions that can be done in par
 uint16_t instructionsStage[4] = {0};  //bec. each instruction of the 4 could have a different stage (fetch - decode - execute - writeback)
                                       // recall: the fetch (IF) and memory (MEM) stages cannot be done in parallel since they access same physical memory
 bool instructionActive[4] = {false};
-int RegisterDestination[32] = {-1}; // 
+int RegisterDestination[32] = {-1}; 
 
 char* getStringOpcode(int opcode,char* returnValue) {
     switch(opcode) {
@@ -90,60 +90,18 @@ struct instructionData{
 };
 struct instructionData instructionDataArray[4]; 
 
-char* getStringOpcode(int opcode,char* returnValue) {
-    switch(opcode) {
-        case 0: strcpy(returnValue,"ADD"); break;
-        case 1: strcpy(returnValue,"SUB"); break;
-        case 2: strcpy(returnValue,"MULI"); break;
-        case 3: strcpy(returnValue,"ADDI"); break;
-        case 4: strcpy(returnValue,"BNE"); break;
-        case 5: strcpy(returnValue,"ANDI"); break;
-        case 6: strcpy(returnValue,"ORI"); break;
-        case 7: strcpy(returnValue,"J"); break;
-        case 8: strcpy(returnValue,"SLL"); break;
-        case 9: strcpy(returnValue,"SRL"); break;
-        case 10: strcpy(returnValue,"LW"); break;
-        case 11: strcpy(returnValue,"SW"); break;
-        
-        default: return "UNKNOWN";
-    }
-}
-
-char* instructionToString(int instruction, char* buffer, size_t buffer_size){
-        int opcode = (instruction & 0b11110000000000000000000000000000)>>28; 
-        char opcodeString[5];
-        getStringOpcode(opcode,opcodeString);
-        int R1Address = (instruction & 0b00001111100000000000000000000000)>>23;  
-        int R2Address =  (instruction & 0b00000000011111000000000000000000)>>18;   
-        int R3Address = (instruction & 0b00000000000000111110000000000000)>>13; 
-        int shamt = (instruction & 0b00000000000000000001111111111111);      
-        int imm = (instruction & 0b00000000000000111111111111111111)>>0;     
-        int address = (instruction & 0b00001111111111111111111111111111)>>0;
-    switch(opcode) {
-        case 0:
-        case 1: snprintf(buffer, buffer_size,"%s R%d R%d R%d",opcodeString,R1Address,R2Address,R3Address); break;
-        case 2: 
-        case 3:
-        case 4: 
-        case 5: 
-        case 6: 
-        case 10: // Getting all that use R1 R2 imm
-        case 11: snprintf(buffer, buffer_size,"%s R%d R%d %d",opcodeString,R1Address,R2Address,imm); break;
-        case 7: snprintf(buffer, buffer_size,"%s %d",opcodeString,address); break;
-        case 8: 
-        case 9: snprintf(buffer, buffer_size,"%s R%d R%d %d",opcodeString,R1Address,R2Address,shamt); break;
-        default: "";break;
-    }
-}
-
 void flushInstructions(int branchInstructionIndex){
     int branchClockCycleEntered = instructionDataArray[branchInstructionIndex].clockCycleEntered;
+    // printf("Branch address: %d\n",instructionDataArray[branchInstructionIndex].instructionAddress);
+    // printf("CLcck cycle of branch: %d\n",branchClockCycleEntered);
     for(int i=0;i<4;i++){
         int clockCycleEntered =  instructionDataArray[i].clockCycleEntered;
-        if(i!=branchInstructionIndex && clockCycleEntered>branchClockCycleEntered){
+        // printf("CLock cycle entered: %d\n",clockCycleEntered);
+        if(i!=branchInstructionIndex && clockCycleEntered>branchClockCycleEntered && clockCycleEntered!=branchClockCycleEntered+6){
             // 1st condition: Flush the instructions that is not the branch one
             // &&
             // 2nd condition: Flush the instructions that came after the branch not before
+            // printf("inst stage: %d\n",instructionsStage[i]);
             char string[50];
             instructionToString(instructions[i], string, sizeof(string));
             printf("FLush:  %s\n",string);
@@ -297,11 +255,20 @@ void readInstructions() {
                 reg_num = strtol(token + 1, &ptr, 10);
                 printf("Binary value of R%d: %d\n", reg_num, reg_num);
                 instruction += (reg_num << 18);
-
-                token = strtok(NULL, " - ");
+                token = strtok(NULL, " ");
                 reg_num = strtol(token, &ptr, 10);
-                printf("value of imm is %d: %d\n", reg_num, reg_num);
-                instruction += reg_num;
+                signed int imm = atoi(token);
+                printf("imm value in read: %d\n\n\n",imm);
+                printf("instruction before +imm: %d\n",instruction);
+                if(imm<0){
+                    imm = imm ^ 0b111111111111111111;
+                    imm = -(imm + 1);
+                    printf("imm: 2's comp:%d\n",imm);
+                    instruction+=imm;
+                }else{
+                    instruction+=imm;
+                }
+                printf("instruction after +imm: %d\n",instruction);
             } else if(isJ) {
                 token = strtok(NULL, " - ");
                 reg_num = strtol(token, &ptr, 10);
@@ -317,8 +284,35 @@ void readInstructions() {
             break;
         }
         counter++;
-    }
+    }   
     fclose(file);
+}
+
+bool isLW(char *str) {
+    // Extract the first 4 characters of the string
+    char first_2_chars[2];  // Make room for the null terminator
+    strncpy(first_2_chars, str, 2);
+
+    if(strcmp(first_2_chars,"LW")==0){
+        return true;
+    }    
+    return false;  // No match found
+}
+
+bool notR1Instruction(char *str) {
+    // Extract the first 4 characters of the string
+    char first_3_chars[3];  // Make room for the null terminator
+    strncpy(first_3_chars, str, 3);
+
+    char first_2_chars[2];  // Make room for the null terminator
+    strncpy(first_2_chars, str, 2);
+
+    char firstChar = str[0];
+
+    if(strcmp(first_3_chars,"BNE")==0 || firstChar == 'J' || strcmp(first_2_chars,"SW")==0){
+        return true;
+    }    
+    return false;  // No match found
 }
 
 uint32_t concatenate_bits(uint32_t PC, uint32_t imm) {
@@ -391,38 +385,23 @@ bool isFirst4CharactersInArray(char *str, char *array[], int array_size) {
 
 void fetch(int clockCycle) {
     // In description says that we fetch from memory
-    int i=0;
-    while(instructionsStage[i]!=0 && i<4){
-        i++;
-    }
-    if(i>=4) return;
-    int pcAddressOfBranch = -1;
-    for(int i=0;i<4;i++){
-        if(instructionDataArray[i].branch){
-            // There is a previous instruction which branched but has not written back to PC
-            pcAddressOfBranch = instructionDataArray[i].aluResult;
+    if(PC<1024 && memoryUnit[PC]!=0){
+        int i=0;
+        while(instructionsStage[i]!=0 && i<4){
+            i++;
         }
-    }
-    if(pcAddressOfBranch!=-1){
-        // There is a previous instruction which branched but has not written back to PC
-        // pcAddressOfBranch value is the one that will be written back in Write Back stage
-        printf("PC address branch: %d",pcAddressOfBranch); // sa7
-        instructionDataArray[i].instructionAddress = pcAddressOfBranch;
-        instructions[i] = memoryUnit[pcAddressOfBranch];
-
-    }else{
-        instructionDataArray[i].instructionAddress = PC;
+        if(i>=4) return;
+        instructionDataArray[i].clockCycleEntered = clockCycle;
         instructions[i] = memoryUnit[PC];
+        instructionDataArray[i].instructionAddress = PC;
+        PC = PC + 1;
+        instructionsStage[i] = 1;
+        instructionActive[i] = true;
+        char string[50];
+        instructionToString(instructions[i], string, sizeof(string));
+        
+        printf("Instruction:  %s     |      Stage: Fetch \n",string);
     }
-    
-    instructionDataArray[i].clockCycleEntered = clockCycle;
-    PC = PC + 1;
-    instructionsStage[i] = 1;
-    instructionActive[i] = true;
-    char string[50];
-    instructionToString(instructions[i], string, sizeof(string));
-    
-    printf("Instruction:  %s     |      Stage: Fetch \n",string);
 }
 
 bool decode(int32_t instructionIndex){
@@ -532,7 +511,18 @@ void execute(int32_t instructionIndex){
     int R2 = instructionDataArray[instructionIndex].R2;
     int R3 = instructionDataArray[instructionIndex].R3;
     int shamt = instructionDataArray[instructionIndex].shamt;
-    int imm = instructionDataArray[instructionIndex].imm;
+    signed int imm = instructionDataArray[instructionIndex].imm;
+
+    // Handling Negative values
+    bool negativeFlag = false;
+    int MSB = imm & 0b100000000000000000;
+    MSB = MSB >> 17;
+    if(MSB==1){
+        // Negative number
+        negativeFlag = true;
+        imm = imm ^ 0b111111111111111111;
+        imm = imm + 1;
+    }
     int res;
     int address = instructionDataArray[instructionIndex].address;
     switch (opcode)
@@ -547,43 +537,63 @@ void execute(int32_t instructionIndex){
             break;
         case 2:
             // MULI
-            instructionDataArray[instructionIndex].aluResult = R2 * imm;       
+            if(negativeFlag){
+                instructionDataArray[instructionIndex].aluResult = R2 * (-imm);   
+            }else{
+                instructionDataArray[instructionIndex].aluResult = R2 * imm; 
+            }    
             break;
 
         case 3:
             // ADDI
-            instructionDataArray[instructionIndex].aluResult = R2 + imm;       
+            if(negativeFlag){
+                instructionDataArray[instructionIndex].aluResult = R2 + (-imm);   
+            }else{
+                instructionDataArray[instructionIndex].aluResult = R2 + imm; 
+            }     
             break;
 
         case 4:
             // BNE
             res = R1-R2;
+            printf("PC was %i in Execute Stage \n",PC);
             if(res!=0){
-                instructionDataArray[instructionIndex].aluResult = PC + imm;  //pc + 1 is already done so we'll add the imm directly --> check the remarks document
+                if(negativeFlag){
+                    PC = PC + (-imm);  //pc + 1 is already done so we'll add the imm directly --> check the remarks document
+                }else{
+                    PC = PC + imm;
+                }
+                printf("PC was changed to %i in Execute Stage \n",PC);
                 instructionDataArray[instructionIndex].branch = true;
-                flushInstructions(instructionIndex);
             }else{
-                instructionDataArray[instructionIndex].aluResult = PC; // Leave PC as is
-            }     
-            
+                printf("PC was unchanged \n");
+            }          
             break;
 
         case 5:
             // ANDI
-            instructionDataArray[instructionIndex].aluResult = R2 & imm;         
+            if(negativeFlag){   
+                instructionDataArray[instructionIndex].aluResult = R2 & (-imm);  
+            }else{
+                instructionDataArray[instructionIndex].aluResult = R2 & imm;  
+            }      
             break;
 
         case 6:
             // ORI
-            instructionDataArray[instructionIndex].aluResult = R2 | imm;
+            if(negativeFlag){
+                instructionDataArray[instructionIndex].aluResult = R2 | (-imm);
+            }else{
+                instructionDataArray[instructionIndex].aluResult = R2 | imm;
+            }
             break;
 
         case 7:
             // J
             instructionDataArray[instructionIndex].branch = true;
-            instructionDataArray[instructionIndex].aluResult = concatenate_bits(PC,address);
-            flushInstructions(instructionIndex);
-            // printf("PC has changed to %i in execute stage \n",temp); // TODO remove
+            printf("PC was %i in Execute Stage \n",PC);
+            PC = concatenate_bits(PC,address);
+            printf("PC was changed to %i in Execute Stage \n",PC);
             break;
 
         case 8:
@@ -600,18 +610,20 @@ void execute(int32_t instructionIndex){
             // LW            
             // R1 = memoryUnit[R2+imm];     --> this accesses the memory which is incorrect in execute stage
             //loadStoreAddress holds R2+imm (ALU operation)
-            // Here error is R2 is = 0 while supposed to be 2
-            // printf("LWWWWWWWWWWWWWWWWWWWW\n");
-            // printf("R2 reg is %d in LW\n",R[2]);
-            // printf("R2Address is %d in LW\n",instructionDataArray[instructionIndex].R2Address);
-            // printf("R2 is %d in LW\n",R2);
-            // printf("Imm is %d in LW\n",imm);
-            instructionDataArray[instructionIndex].loadStoreAddress = R2 + imm; 
+            if(negativeFlag){
+                instructionDataArray[instructionIndex].loadStoreAddress = R2 + (-imm);
+            }else{
+                instructionDataArray[instructionIndex].loadStoreAddress = R2 + imm;
+            } 
             break;
 
         case 11:
             // SW
-            instructionDataArray[instructionIndex].loadStoreAddress = R2 + imm;
+            if(negativeFlag){
+                instructionDataArray[instructionIndex].loadStoreAddress = R2 + (-imm);
+            }else{
+                instructionDataArray[instructionIndex].loadStoreAddress = R2 + imm;
+            }
             printf("SW instruction \n");
             break;
 
@@ -631,7 +643,11 @@ void memory(int32_t instructionIndex){
     if(opcode==10){
         // LW
         // printf("R%i was %i in Memory stage \n",R1Address,R1);
-        instructionDataArray[instructionIndex].memoryValue =  memoryUnit[memoryLocation];
+        if(memoryLocation<0){
+            printf("Memory address location %d is invalid at Memory Stage\n",memoryLocation);
+        }else{
+            instructionDataArray[instructionIndex].memoryValue =  memoryUnit[memoryLocation];
+        }
         // printf("R%i has changed to %i in Memory stage \n",R1Address,R[R1Address]);
     }else if(opcode==11){
         // SW
@@ -661,29 +677,38 @@ void writeback(int32_t instructionIndex){
             R[R1Address] = instructionDataArray[instructionIndex].aluResult;
             printf("R%i has changed to %i in Write Back stage \n\n",R1Address,R[R1Address]);
         }
-    }else if(isPCInstruction(string)){
-        printf("PC was %i in Write Back stage \n",PC);
-        if(instructionDataArray[instructionIndex].branch){
-            PC = instructionDataArray[instructionIndex].aluResult;
-            printf("PC was changed to %i in Write Back stage \n",PC);
-        }else{
-            printf("PC was unchanged \n");
-        }      
+    // }else if(isPCInstruction(string)){
+    //     printf("PC was %i in Write Back stage \n",PC);
+    //     if(instructionDataArray[instructionIndex].branch){
+    //         PC = instructionDataArray[instructionIndex].aluResult;
+    //         printf("PC was changed to %i in Write Back stage \n",PC);
+    //     }else{
+    //         printf("PC was unchanged \n");
+    //     }      
         
-    }else if(isSW(string)){
+    }else if(isLW(string)){
         int R1 = instructionDataArray[instructionIndex].R1;
         int memoryLocation = instructionDataArray[instructionIndex].loadStoreAddress;
-        printf("R%i was %i in Write Back stage \n",R1Address,R1);
-        R[R1Address] = instructionDataArray[instructionIndex].memoryValue;
-        printf("R%i has changed to %i in Write Back stage \n",R1Address,R[R1Address]);
+        if(memoryLocation<0){
+            printf("Memory address location %d is invalid at Write Back Stage\n",memoryLocation);
+        }else{
+            printf("R%i was %i in Write Back stage \n",R1Address,R1);
+            R[R1Address] =  instructionDataArray[instructionIndex].memoryValue;
+            printf("R%i has changed to %i in Write Back stage \n",R1Address,R[R1Address]);
+        }
     }
 
     // Reset data for that instruction
-    for(int i = 0;i<32;i++){
-        if(RegisterDestination[i]==instructionIndex){
-            RegisterDestination[i] = -1;
-        }
+    bool flushed = false;
+    if(instructionDataArray[instructionIndex].branch){
+        // If a J or BNE instruction
+        // &&
+        // branch will occur (BNE condition is true || J instruction)
+        flushInstructions(instructionIndex);
+        flushed = true;
     }
+    instructions[instructionIndex]=-1;
+    instructionActive[instructionIndex] = false;
     instructionDataArray[instructionIndex].opcode = 0;  
     instructionDataArray[instructionIndex].R1Address = 0;
     instructionDataArray[instructionIndex].R1 = 0;
@@ -696,6 +721,7 @@ void writeback(int32_t instructionIndex){
     instructionDataArray[instructionIndex].address = 0;
     instructionDataArray[instructionIndex].branch = false;
     instructionsStage[instructionIndex]=0;
+    return flushed;
     
 }
 
@@ -731,78 +757,12 @@ int main() {
     R[13] = 13;
     R[14] = 14;
 
-    printf("\n\n\n\n\n");
-    // fetch(0);
-    // decode(0);
-    // printf("%d\n",instructionDataArray[0].imm);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // printf("%d\n",memoryUnit[8]);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // printf("%d\n",memoryUnit[17]);
-    // printf("%d\n",R[1]);
-    // memory(0);
-    // writeback(0);
-
+    bool runningInstruction = false;
     printf("\n\n\n\n\n");
 
-    while(clockCycle<=19){
-        printf("Clock Cycle: %d \n",clockCycle);
-        // printf("Stall counter: %d \n",stallCounter);
-        // printf("Stall flag: %d \n\n",stallFlag);
+    while(((memoryUnit[PC]!=0 && PC<1024)) || runningInstruction){
+        printf("Clock Cycle: %d \n\n",clockCycle);
+        runningInstruction = false;
     
         // FETCH
         if((clockCycle%2==1 && stallCounter%2==0) || (clockCycle%2==0 && stallCounter%2==1)&& !stallFlag){
