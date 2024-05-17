@@ -509,7 +509,7 @@ void memory(int32_t instructionIndex){
         // since only memory is LW and SW
         printf("Memory address location %i was %i in Memory stage \n",memoryLocation,memoryUnit[memoryLocation]);
         if(memoryLocation<1023){
-            printf("Memory address location %i was not changed (due to invalid memory address) \n",memoryLocation,memoryUnit[memoryLocation]);
+            printf("Memory address location %i was not changed (due to invalid memory address) \n",memoryLocation);
         }else{
             memoryUnit[memoryLocation] = R1;
             printf("Memory address location %i has changed to %i in Memory stage \n",memoryLocation,memoryUnit[memoryLocation]);
