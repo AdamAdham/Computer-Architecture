@@ -351,7 +351,6 @@ void fetch(int clockCycle) {
     if(pcAddressOfBranch!=-1){
         // There is a previous instruction which branched but has not written back to PC
         // pcAddressOfBranch value is the one that will be written back in Write Back stage
-        printf("PC address branch: %d",pcAddressOfBranch); // sa7
         instructionDataArray[i].instructionAddress = pcAddressOfBranch;
         instructions[i] = memoryUnit[pcAddressOfBranch];
 
@@ -359,7 +358,6 @@ void fetch(int clockCycle) {
         instructionDataArray[i].instructionAddress = PC;
         instructions[i] = memoryUnit[PC];
     }
-
     instructionDataArray[i].clockCycleEntered = clockCycle;
     PC = PC + 1;
     instructionsStage[i] = 1;
@@ -535,7 +533,7 @@ void writeback(int32_t instructionIndex){
     }else if(isPCInstruction(string)){
         printf("PC was %i in Write Back stage \n",PC);
         if(instructionDataArray[instructionIndex].branch){
-            PC = instructionDataArray[instructionIndex].aluResult;
+            PC = instructionDataArray[instructionIndex].aluResult + 1;
             printf("PC was changed to %i in Write Back stage \n",PC);
         }else{
             printf("PC was unchanged \n");
@@ -548,6 +546,8 @@ void writeback(int32_t instructionIndex){
         printf("R%i has changed to %i in Write Back stage \n",R1Address,R[R1Address]);
     }
     // Reset instruction data
+    instructions[instructionIndex]=-1;
+    instructionActive[instructionIndex] = false;
     instructionDataArray[instructionIndex].opcode = 0;  
     instructionDataArray[instructionIndex].R1Address = 0;
     instructionDataArray[instructionIndex].R1 = 0;
@@ -660,15 +660,11 @@ int main() {
     while(clockCycle<=19){
         printf("Clock Cycle: %d \n\n",clockCycle);
     
-        // FETCH
-        if(clockCycle%2!=0){
-            // every 2 clock cycles we fetch
-            fetch(clockCycle);
-        }
         for(int i=0;i<4;i++){
-            if(instructionActive[i]==false){
+            if(instructionActive[i]==true){
                 char string[50];
                 instructionToString(instructions[i], string, sizeof(string));
+                // printf("Instruction:  %s index = %d  |      instructionsStage[i]:%d \n\n",string,instructionDataArray[i].instructionAddress+1,instructionsStage[i]); 
                 if(instructionsStage[i]==4 ){     //check if we finished the execute stage  --> go to WB
                     writeback(i);
                 }
@@ -699,24 +695,11 @@ int main() {
                 }
             }
         }
-        instructionActive[0] = false;
-        instructionActive[1] = false;
-        instructionActive[2] = false;
-        instructionActive[3] = false;
+        if(clockCycle%2!=0){
+            // every 2 clock cycles we fetch
+            fetch(clockCycle);
+        }
         
-        // if(clockCycle%2==0){
-        //     // every 2 clock cycles we fetch
-        //     for(int i=0;i<4;i++){
-        //         if(instructionsStage[i]==3){
-        //             mem(i);
-        //         }
-        //     }
-        // }
-
-
-        // decode takes 2 clocks
-        // execute takes 2 clocks
-        // write back cant be done with fetch
         printf("\n");
         clockCycle++;
     }
