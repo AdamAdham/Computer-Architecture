@@ -13,9 +13,6 @@ uint16_t instructionsStage[4] = {0};  //bec. each instruction of the 4 could hav
 bool instructionActive[4] = {false};
 int RegisterDestination[32] = {-1}; // 
 
-bool instructionActive[4] = {false};
-int RegisterDestination[32] = {-1}; // 
-
 char* getStringOpcode(int opcode,char* returnValue) {
     switch(opcode) {
         case 0: strcpy(returnValue,"ADD"); break;
