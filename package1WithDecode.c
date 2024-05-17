@@ -358,21 +358,23 @@ bool isFirst4CharactersInArray(char *str, char *array[], int array_size) {
 
 void fetch(int clockCycle) {
     // In description says that we fetch from memory
-    int i=0;
-    while(instructionsStage[i]!=0 && i<4){
-        i++;
+    if(PC<1024 && memoryUnit[PC]!=0){
+        int i=0;
+        while(instructionsStage[i]!=0 && i<4){
+            i++;
+        }
+        if(i>=4) return;
+        instructionDataArray[i].clockCycleEntered = clockCycle;
+        instructions[i] = memoryUnit[PC];
+        instructionDataArray[i].instructionAddress = PC;
+        PC = PC + 1;
+        instructionsStage[i] = 1;
+        instructionActive[i] = true;
+        char string[50];
+        instructionToString(instructions[i], string, sizeof(string));
+        
+        printf("Instruction:  %s     |      Stage: Fetch \n",string);
     }
-    if(i>=4) return;
-    instructionDataArray[i].clockCycleEntered = clockCycle;
-    instructions[i] = memoryUnit[PC];
-    instructionDataArray[i].instructionAddress = PC;
-    PC = PC + 1;
-    instructionsStage[i] = 1;
-    instructionActive[i] = true;
-    char string[50];
-    instructionToString(instructions[i], string, sizeof(string));
-    
-    printf("Instruction:  %s     |      Stage: Fetch \n",string);
 }
 
 void decode(int32_t instructionIndex){
@@ -656,77 +658,13 @@ int main() {
     R[14] = 14;
     R[20] = 20;
 
-    printf("\n\n\n\n\n");
-    // fetch(0);
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch(0);
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch(0);
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch(0);
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch(0);
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // printf("%d\n",memoryUnit[8]);
-    // memory(0);
-    // writeback(0);
-    // fetch();
-    // decode(0);
-    // execute(0);
-    // printf("%d\n",memoryUnit[17]);
-    // printf("%d\n",R[1]);
-    // memory(0);
-    // writeback(0);
-
+    bool runningInstruction = false;
     printf("\n\n\n\n\n");
 
-    while(memoryUnit[PC]!=0 && PC<1024){
-    // while(clockCycle<=19){
+    while(((memoryUnit[PC]!=0 && PC<1024)) || runningInstruction){
         printf("Clock Cycle: %d \n\n",clockCycle);
-
+        runningInstruction = false;
+        
         if(clockCycle%2!=0){
             // every 2 clock cycles we fetch
             fetch(clockCycle);
@@ -743,27 +681,32 @@ int main() {
                 if(instructionsStage[i]==3 && clockCycle%2==0){  //check if we finished the execute stage + no fetch operation is being executed
                     printf("Instruction:  %s index = %d   |      Stage: Memory \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     memory(i);
+                    runningInstruction = true;
                 }
                 if(instructionsStage[i]==2&&(executeIndex==i||executeIndex==-1)){  //check if we finished the decode stage --> go to execute
                     printf("Instruction:  %s index = %d  |      Stage: Execute \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     executeCount++;
                     executeIndex = i;
+                    runningInstruction = true;
                 } 
                 if(instructionsStage[i]==1&&(decodeIndex==i||decodeIndex==-1)){  //check if we finished the fetch stage
                     printf("Instruction:  %s index = %d  |      Stage: Decode \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     decodeCount++;  //to check that you completed the 2 clock cycles
                     decodeIndex = i; // to prevent simultaneous decode of instructions
+                    runningInstruction = true;
                 }
                 if(executeCount==2){
                     execute(i);
                     executeCount=0;
                     executeIndex=-1;
+                    runningInstruction = true;
                 }
                 
                 if(decodeCount==2){  //to reset the decode count
                     decode(i);
                     decodeCount=0;
                     decodeIndex=-1;
+                    runningInstruction = true;
                 }
                 if(flushed){
                     // When a 
