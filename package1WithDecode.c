@@ -13,6 +13,52 @@ uint16_t instructionsStage[4] = {0};  //bec. each instruction of the 4 could hav
 bool instructionActive[4] = {false};
 int RegisterDestination[32] = {-1}; // 
 
+char* getStringOpcode(int opcode,char* returnValue) {
+    switch(opcode) {
+        case 0: strcpy(returnValue,"ADD"); break;
+        case 1: strcpy(returnValue,"SUB"); break;
+        case 2: strcpy(returnValue,"MULI"); break;
+        case 3: strcpy(returnValue,"ADDI"); break;
+        case 4: strcpy(returnValue,"BNE"); break;
+        case 5: strcpy(returnValue,"ANDI"); break;
+        case 6: strcpy(returnValue,"ORI"); break;
+        case 7: strcpy(returnValue,"J"); break;
+        case 8: strcpy(returnValue,"SLL"); break;
+        case 9: strcpy(returnValue,"SRL"); break;
+        case 10: strcpy(returnValue,"LW"); break;
+        case 11: strcpy(returnValue,"SW"); break;
+
+        default: return "UNKNOWN";
+    }
+}
+
+char* instructionToString(int instruction, char* buffer, size_t buffer_size){
+        int opcode = (instruction & 0b11110000000000000000000000000000)>>28; 
+        char opcodeString[5];
+        getStringOpcode(opcode,opcodeString);
+        int R1Address = (instruction & 0b00001111100000000000000000000000)>>23;  
+        int R2Address =  (instruction & 0b00000000011111000000000000000000)>>18;   
+        int R3Address = (instruction & 0b00000000000000111110000000000000)>>13; 
+        int shamt = (instruction & 0b00000000000000000001111111111111);      
+        int imm = (instruction & 0b00000000000000111111111111111111)>>0;     
+        int address = (instruction & 0b00001111111111111111111111111111)>>0;
+    switch(opcode) {
+        case 0:
+        case 1: snprintf(buffer, buffer_size,"%s R%d R%d R%d",opcodeString,R1Address,R2Address,R3Address); break;
+        case 2: 
+        case 3:
+        case 4: 
+        case 5: 
+        case 6: 
+        case 10: // Getting all that use R1 R2 imm
+        case 11: snprintf(buffer, buffer_size,"%s R%d R%d %d",opcodeString,R1Address,R2Address,imm); break;
+        case 7: snprintf(buffer, buffer_size,"%s %d",opcodeString,address); break;
+        case 8: 
+        case 9: snprintf(buffer, buffer_size,"%s R%d R%d %d",opcodeString,R1Address,R2Address,shamt); break;
+        default: "";break;
+    }
+}
+
 struct instructionData{
     int opcode;
     int R1;  //r
@@ -31,6 +77,7 @@ struct instructionData{
     bool branch;
     int dependantIndex;
     int clockCycleEntered;
+    int memoryValue;
 };
 struct instructionData instructionDataArray[4]; 
 
@@ -42,12 +89,15 @@ void flushInstructions(int branchInstructionIndex){
             // 1st condition: Flush the instructions that is not the branch one
             // &&
             // 2nd condition: Flush the instructions that came after the branch not before
+            char string[50];
+            instructionToString(instructions[i], string, sizeof(string));
+            printf("FLush:  %s\n",string);
             instructions[i] = -1;
             instructionsStage[i] = 0; 
             instructionActive[i] = false;
         }  
     }
-    
+    printf("\n");
 }
 
 // boolean array so that no 2 threads can do on same instr
@@ -119,52 +169,6 @@ Opcode getOpcode(const char *opcode_str) {
         return J;
     } else {
         return -1; // unknown opcode
-    }
-}
-
-char* getStringOpcode(int opcode,char* returnValue) {
-    switch(opcode) {
-        case 0: strcpy(returnValue,"ADD"); break;
-        case 1: strcpy(returnValue,"SUB"); break;
-        case 2: strcpy(returnValue,"MULI"); break;
-        case 3: strcpy(returnValue,"ADDI"); break;
-        case 4: strcpy(returnValue,"BNE"); break;
-        case 5: strcpy(returnValue,"ANDI"); break;
-        case 6: strcpy(returnValue,"ORI"); break;
-        case 7: strcpy(returnValue,"J"); break;
-        case 8: strcpy(returnValue,"SLL"); break;
-        case 9: strcpy(returnValue,"SRL"); break;
-        case 10: strcpy(returnValue,"LW"); break;
-        case 11: strcpy(returnValue,"SW"); break;
-        
-        default: return "UNKNOWN";
-    }
-}
-
-char* instructionToString(int instruction, char* buffer, size_t buffer_size){
-        int opcode = (instruction & 0b11110000000000000000000000000000)>>28; 
-        char opcodeString[5];
-        getStringOpcode(opcode,opcodeString);
-        int R1Address = (instruction & 0b00001111100000000000000000000000)>>23;  
-        int R2Address =  (instruction & 0b00000000011111000000000000000000)>>18;   
-        int R3Address = (instruction & 0b00000000000000111110000000000000)>>13; 
-        int shamt = (instruction & 0b00000000000000000001111111111111);      
-        int imm = (instruction & 0b00000000000000111111111111111111)>>0;     
-        int address = (instruction & 0b00001111111111111111111111111111)>>0;
-    switch(opcode) {
-        case 0:
-        case 1: snprintf(buffer, buffer_size,"%s R%d R%d R%d",opcodeString,R1Address,R2Address,R3Address); break;
-        case 2: 
-        case 3:
-        case 4: 
-        case 5: 
-        case 6: 
-        case 10: // Getting all that use R1 R2 imm
-        case 11: snprintf(buffer, buffer_size,"%s R%d R%d %d",opcodeString,R1Address,R2Address,imm); break;
-        case 7: snprintf(buffer, buffer_size,"%s %d",opcodeString,address); break;
-        case 8: 
-        case 9: snprintf(buffer, buffer_size,"%s R%d R%d %d",opcodeString,R1Address,R2Address,shamt); break;
-        default: "";break;
     }
 }
 
@@ -262,6 +266,33 @@ void readInstructions() {
     fclose(file);
 }
 
+bool isSW(char *str) {
+    // Extract the first 4 characters of the string
+    char first_2_chars[2];  // Make room for the null terminator
+    strncpy(first_2_chars, str, 2);
+
+    if(strcmp(first_2_chars,"SW")==0){
+        return true;
+    }    
+    return false;  // No match found
+}
+
+bool notR1Instruction(char *str) {
+    // Extract the first 4 characters of the string
+    char first_3_chars[3];  // Make room for the null terminator
+    strncpy(first_3_chars, str, 3);
+
+    char first_2_chars[2];  // Make room for the null terminator
+    strncpy(first_2_chars, str, 2);
+
+    char firstChar = str[0];
+
+    if(strcmp(first_3_chars,"BNE")==0 || firstChar == 'J' || strcmp(first_2_chars,"SW")==0){
+        return true;
+    }    
+    return false;  // No match found
+}
+
 uint32_t concatenate_bits(uint32_t PC, uint32_t imm) {
     // TODO TEST
     // Extract the desired bits from PC and imm
@@ -310,8 +341,25 @@ void fetch(int clockCycle) {
         i++;
     }
     if(i>=4) return;
-    instructions[i] = memoryUnit[PC];
-    instructionDataArray[i].instructionAddress = PC;
+    int pcAddressOfBranch = -1;
+    for(int i=0;i<4;i++){
+        if(instructionDataArray[i].branch){
+            // There is a previous instruction which branched but has not written back to PC
+            pcAddressOfBranch = instructionDataArray[i].aluResult;
+        }
+    }
+    if(pcAddressOfBranch!=-1){
+        // There is a previous instruction which branched but has not written back to PC
+        // pcAddressOfBranch value is the one that will be written back in Write Back stage
+        printf("PC address branch: %d",pcAddressOfBranch); // sa7
+        instructionDataArray[i].instructionAddress = pcAddressOfBranch;
+        instructions[i] = memoryUnit[pcAddressOfBranch];
+
+    }else{
+        instructionDataArray[i].instructionAddress = PC;
+        instructions[i] = memoryUnit[PC];
+    }
+
     instructionDataArray[i].clockCycleEntered = clockCycle;
     PC = PC + 1;
     instructionsStage[i] = 1;
@@ -453,9 +501,9 @@ void memory(int32_t instructionIndex){
     int R1Address = instructionDataArray[instructionIndex].R1Address;
     if(opcode==10){
         // LW
-        printf("R%i was %i in Memory stage \n",R1Address,R1);
-        R[R1Address] = memoryUnit[memoryLocation];
-        printf("R%i has changed to %i in Memory stage \n",R1Address,R[R1Address]);
+        // printf("R%i was %i in Memory stage \n",R1Address,R1);
+        instructionDataArray[instructionIndex].memoryValue =  memoryUnit[memoryLocation];
+        // printf("R%i has changed to %i in Memory stage \n",R1Address,R[R1Address]);
     }else if(opcode==11){
         // SW
         // since only memory is LW and SW
@@ -471,8 +519,8 @@ void writeback(int32_t instructionIndex){
     char string[50];
     instructionToString(instructions[instructionIndex], string, sizeof(string));
     printf("Instruction:  %s     |      Stage: Writeback \n",string);
+    int R1Address = instructionDataArray[instructionIndex].R1Address;
     if(isFirst4CharactersInArray(string, generalRegisterOpcodes, sizeof(generalRegisterOpcodes) / sizeof(generalRegisterOpcodes[0]))) {     
-        int R1Address = instructionDataArray[instructionIndex].R1Address;
         printf("R%i was %i in Write Back stage \n",R1Address,R[R1Address]);
         if(R1Address==0){
             printf("R0 has not been changed \n\n");
@@ -488,8 +536,25 @@ void writeback(int32_t instructionIndex){
         }else{
             printf("PC was unchanged \n");
         }      
-        
+    }else if(isSW(string)){
+        int R1 = instructionDataArray[instructionIndex].R1;
+        int memoryLocation = instructionDataArray[instructionIndex].loadStoreAddress;
+        printf("R%i was %i in Write Back stage \n",R1Address,R1);
+        R[R1Address] =  instructionDataArray[instructionIndex].memoryValue;
+        printf("R%i has changed to %i in Write Back stage \n",R1Address,R[R1Address]);
     }
+    // Reset instruction data
+    instructionDataArray[instructionIndex].opcode = 0;  
+    instructionDataArray[instructionIndex].R1Address = 0;
+    instructionDataArray[instructionIndex].R1 = 0;
+    instructionDataArray[instructionIndex].R2Address = 0; 
+    instructionDataArray[instructionIndex].R2 =
+    instructionDataArray[instructionIndex].R3Address = 0;
+    instructionDataArray[instructionIndex].R3 = 0;
+    instructionDataArray[instructionIndex].shamt = 0;
+    instructionDataArray[instructionIndex].imm = 0; 
+    instructionDataArray[instructionIndex].address = 0;
+    instructionDataArray[instructionIndex].branch = false;
     instructionsStage[instructionIndex]=0;
 }
 
@@ -503,8 +568,8 @@ int main() {
     int clockCycle = 1;
     int decodeCount = 0;
     int executeCount = 0;
-    int decodeFlag = -1;
-    int executeFlag = -1;
+    int decodeIndex = -1;
+    int executeIndex = -1;
     
     R[1] = 1;
     R[2] = 2;
@@ -607,26 +672,26 @@ int main() {
                     printf("Instruction:  %s index = %d   |      Stage: Memory \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     memory(i);
                 }
-                if(instructionsStage[i]==2&&(executeFlag==i||executeFlag==-1)){  //check if we finished the decode stage --> go to execute
+                if(instructionsStage[i]==2&&(executeIndex==i||executeIndex==-1)){  //check if we finished the decode stage --> go to execute
                     printf("Instruction:  %s index = %d  |      Stage: Execute \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     executeCount++;
-                    executeFlag = i;
+                    executeIndex = i;
                 }
-                if(instructionsStage[i]==1&&(decodeFlag==i||decodeFlag==-1)){  //check if we finished the fetch stage
+                if(instructionsStage[i]==1&&(decodeIndex==i||decodeIndex==-1)){  //check if we finished the fetch stage
                     printf("Instruction:  %s index = %d  |      Stage: Decode \n\n",string,instructionDataArray[i].instructionAddress+1); //TODO remove address when done testing
                     decodeCount++;  //to check that you completed the 2 clock cycles
-                    decodeFlag = i; // to prevent simultaneous decode of instructions
+                    decodeIndex = i; // to prevent simultaneous decode of instructions
                 }
                 if(executeCount==2){
                     execute(i);
                     executeCount=0;
-                    executeFlag=-1;
+                    executeIndex=-1;
                 }
                 
                 if(decodeCount==2){  //to reset the decode count
                     decode(i);
                     decodeCount=0;
-                    decodeFlag=-1;
+                    decodeIndex=-1;
                 }
             }
         }
