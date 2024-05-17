@@ -615,7 +615,7 @@ void writeback(int32_t instructionIndex){
         int R1 = instructionDataArray[instructionIndex].R1;
         int memoryLocation = instructionDataArray[instructionIndex].loadStoreAddress;
         printf("R%i was %i in Write Back stage \n",R1Address,R1);
-        R[R1Address] = memoryUnit[memoryLocation];
+        R[R1Address] = instructionDataArray[instructionIndex].memoryValue;
         printf("R%i has changed to %i in Write Back stage \n",R1Address,R[R1Address]);
     }
 
